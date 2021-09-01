@@ -14,17 +14,15 @@ import java.util.Scanner;
  * regex engine
  */ 
 public class RegexEngine {
-
     static boolean verbose = false;
-    Pattern pattern;
+    State startState;
 
     public RegexEngine(String string) {
-        this.pattern = genPattern(string);
+        this.startState = genState(string);
     }
 
     public boolean match(String string) {
-        String result = this.pattern.trimMatch(string);
-        return result != null && result.length() == 0;
+        return startState.match(string);
     }
 
     public static void main(String[] args) {
@@ -35,30 +33,250 @@ public class RegexEngine {
         regexEngine.match("ab");
     }
 
-    //generate a state of a given regex string
-    Pattern genPattern(String string) {
-        Pattern pattern = null;
-        for (int i = 0; i < string.length(); i++) {
-            if (Character.isLetter(string.charAt(i))) {
-                int len = 1;
-                while (i + len < string.length() && Character.isLetter(string.charAt(i + len))) {
-                    len++;
-                }
-                pattern = new StringPattern(string.substring(i, i + len));
-                i += len-1;
-                continue;
-            }
-            switch (string.charAt(i)) {
-                case '+':
-                    pattern = new PlusPattern(pattern);
+    /**
+     * @brief generate a serial of state from the given regex string,
+     * which does not have alternation operators in the first layer
+     * @param string
+     * @retval the tail of this serial
+     */
+    State genStateWithoutAlter(String s) {
+        GroupState group = new GroupState();
+        EmptyState entrance = new EmptyState();
+        State tail = entrance, current;
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
+                case '(':
+                    int start = i + 1;
+                    int len = 0;
+                    int pares = 1;
+                    while (pares > 0) {
+                        len++;
+                        if (s.charAt(start + len - 1) == ')') {
+                            pares--;
+                        }
+                    }
+                    current = genStateWithoutAlter(s.substring(start, start + len));
+                    i = start + len;
                     break;
+                default:
+                    assert Character.isLetter(ch);
+                    current = new PatternState(new CharPattern(ch));
+                    break;
+            }
+            if (i + 1 < s.length()) {
+                switch (s.charAt(i + 1)) {
+                    case '+':
+                        PlusState plusState = new PlusState(current);
+                        current = plusState;
+                        i++;
+                        break;
+                    case '*':
+                        MultState multState = new MultState(current);
+                        current = multState;
+                        i++;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            tail.addNext(current);
+            tail = current;
+        }
+        EmptyState exit = new EmptyState();
+        tail.addNext(exit);
+        group.entrance = entrance;
+        group.exit = exit;
+        return group;
+    }
+
+    /**
+     * @brief generate a serial states from the given regex string
+     * @param string
+     * @retval the tail of this serial
+     */
+    State genState(String s) {
+        List<Integer> alters = new ArrayList<>();
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+            switch (ch) {
                 case '|':
-                    return new OrPattern(pattern, genPattern(string.substring(i+1)));
+                    alters.add(i);
+                    break;
+                case '(':
+                    int pares = 1;
+                    while (pares > 0) {
+                        i++;
+                        if (s.charAt(i) == '(') {
+                            pares++;
+                        } else if (s.charAt(i) == ')') {
+                            pares--;
+                        }
+                    }
+                    break;
                 default:
                     break;
             }
         }
-        return pattern;
+        if (alters.isEmpty()) {
+            return genStateWithoutAlter(s);
+        } else {
+            GroupState group = new GroupState();
+            EmptyState entrance = new EmptyState();
+            List<State> bodys = new ArrayList<>();
+            int pre = 0;
+            for (Integer i : alters) {
+                bodys.add(genStateWithoutAlter(s.substring(pre, i)));
+                pre = i + 1;
+            }
+            bodys.add(genStateWithoutAlter(s.substring(pre)));
+            EmptyState exit = new EmptyState();
+            group.entrance = entrance;
+            group.exit = exit;
+            for (State state : bodys) {
+                group.addBody(state);
+            }
+            return group;
+        }
+    }
+}
+
+class State {
+    static int count = 0;
+    int id;
+    List<State> next;
+
+    public State() {
+        id = count;
+        count++;
+        next = new ArrayList<>();
+    }
+
+    public void addNext(State state) {
+        next.add(state);
+    }
+
+    public boolean isEnd() {
+        return next.isEmpty();
+    }
+
+    public boolean match(String string) {
+        return false;
+    }
+
+    public List<State> toTails() {
+        List<State> result = new ArrayList<>();
+        if (isEnd()) {
+            result.add(this);
+        } else {
+            for (State state : next) {
+                result.addAll(state.toTails());
+            }
+        }
+        return result;
+    }
+}
+
+class GroupState extends State {
+    EmptyState entrance, exit;
+
+    public GroupState() {
+        entrance = new EmptyState();
+        exit = new EmptyState();
+    }
+
+    public void addBody(State state) {
+        entrance.addNext(state);
+        List<State> tails = state.toTails();
+        for (State tail : tails) {
+            tail.addNext(exit);
+        }
+    }
+
+    @Override
+    public boolean match(String string) {
+        for (State state : entrance.next) {
+            if (state.match(string)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isEnd() {
+        return false;
+    }
+
+    @Override
+    public void addNext(State state) {
+        exit.addNext(state);
+    }
+
+    @Override
+    public List<State> toTails() {
+        List<State> result = new ArrayList<>();
+        if (exit.isEnd()) {
+            result.add(this);
+        } else {
+            for (State state : exit.next) {
+                if (state != entrance) {
+                    result.addAll(state.toTails());
+                }
+            }
+        }
+        return result;
+    }
+}
+
+class PlusState extends GroupState {
+    public PlusState(State state) {
+        addBody(state);
+        exit.addNext(entrance);
+    }
+}
+
+class MultState extends GroupState {
+    public MultState(State state) {
+        PlusState plusState = new PlusState(state);
+        EmptyState emptyState = new EmptyState();
+        addBody(plusState);
+        addBody(emptyState);
+    }
+}
+
+class PatternState extends State {
+    Pattern pattern;
+
+    public PatternState(Pattern pattern) {
+        this.pattern = pattern;
+    }
+
+    @Override
+    public boolean match(String string) {
+        String trimed = pattern.trimMatch(string);
+        if (trimed != null) {
+            for (State state : next) {
+                if (state.match(trimed)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+}
+
+class EmptyState extends PatternState {
+    public EmptyState() {
+        super(new EmptyPattern());
+    }
+
+    @Override
+    public boolean match(String string) {
+        if (isEnd() && string.isEmpty()) {
+            return true;
+        }
+        return super.match(string);
     }
 
 }
@@ -73,56 +291,28 @@ interface Pattern {
     String trimMatch(String string);
 }
 
-class StringPattern implements Pattern {
-    String string;
-
-    public StringPattern(String string) {
-        this.string = string;
-    }
-
+class EmptyPattern implements Pattern {
     @Override
     public String trimMatch(String string) {
-        if (string.startsWith(this.string)) {
-            return string.substring(this.string.length());
-        }
-        return null;
+        return string;
     }
 }
 
-class PlusPattern implements Pattern {
-    Pattern pattern;
+class CharPattern implements Pattern {
+    char c;
 
-    public PlusPattern(Pattern pattern) {
-        this.pattern = pattern;
+    public CharPattern(char c) {
+        this.c = c;
     }
 
     @Override
     public String trimMatch(String string) {
-        String rest = pattern.trimMatch(string);
-        if (rest != null) {
-            String result;
-            do {
-                result = rest;
-                rest = pattern.trimMatch(rest);
-            } while (rest != null);
-            return result;
+        if (string.isEmpty()) {
+            return null;
+        }
+        if (string.charAt(0) == c) {
+            return string.substring(1);
         }
         return null;
-    }
-}
-
-class OrPattern implements Pattern {
-    Pattern left, right;
-
-    public OrPattern(Pattern left, Pattern right) {
-        this.left = left;
-        this.right = right;
-    }
-
-    @Override
-    public String trimMatch(String string) {
-        String left = this.left.trimMatch(string);
-        String right = this.right.trimMatch(string);
-        return left == null ? right:left;
     }
 }
