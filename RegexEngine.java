@@ -58,7 +58,7 @@ public class RegexEngine {
                     i = start + len;
                     break;
                 default:
-                    assert Character.isLetter(ch);
+                    assert Character.isLetterOrDigit(ch) || Character.isSpaceChar(ch);
                     current = new PatternState(new CharPattern(ch));
                     break;
             }
@@ -88,7 +88,7 @@ public class RegexEngine {
         }
         return head;
     }
-
+    
     /**
      * @brief generate a serial states from the given regex string
      * @param string
