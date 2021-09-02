@@ -1,6 +1,14 @@
 import org.junit.Test;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+/** 
+ *******************************************************************************
+ * @file regular-expression-engine/RegexTest.java
+ * @author Daolin Chen - a1838238
+ * @date 02092021
+ * @brief Junit test for Regex engine
+ *******************************************************************************
+ */
 
 public class RegexTest {
 
@@ -68,6 +76,26 @@ public class RegexTest {
         assertTrue(regexEngine.match("ab"));
         assertTrue(regexEngine.match("a b"));
         assertFalse(regexEngine.match("ab b"));
+    }
+
+    @Test
+    public void test01() {
+        RegexEngine regexEngine = new RegexEngine("ab*|c+");
+        assertTrue(regexEngine.match("abb"));
+        assertTrue(regexEngine.match("ccc"));
+        assertFalse(regexEngine.match("abc"));
+    }
+
+    @Test
+    public void test02() {
+        RegexEngine regexEngine = new RegexEngine("a+b*|c* 1*|d *e+");
+        assertTrue(regexEngine.match("aaa"));
+        assertTrue(regexEngine.match("c 1111"));
+        assertTrue(regexEngine.match("deeeeeee"));
+        assertTrue(regexEngine.match("d      e"));
+        assertFalse(regexEngine.match("bbb"));
+        assertFalse(regexEngine.match("c  "));
+        assertFalse(regexEngine.match("d    "));
     }
 }
 
