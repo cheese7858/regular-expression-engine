@@ -29,10 +29,10 @@ public class RegexEngine {
         if (args.length == 1 && args[0].equals("-v")) {
             verbose = true;
         }
-        RegexEngine regexEngine = new RegexEngine("c+");
-        regexEngine.match("ccc");
+        RegexEngine regexEngine = new RegexEngine("((ab)*|c+)de+f*");
+        regexEngine.match("def");
     }
-
+    
     /**
      * @brief generate a serial of state from the given regex string,
      * which does not have alternation operators in the first layer
@@ -46,16 +46,16 @@ public class RegexEngine {
             switch (ch) {
                 case '(':
                     int start = i + 1;
-                    int len = 0;
                     int pares = 1;
                     while (pares > 0) {
-                        len++;
-                        if (s.charAt(start + len - 1) == ')') {
+                        i++;
+                        if (s.charAt(i) == '(') {
+                            pares++;
+                        } else if (s.charAt(i) == ')') {
                             pares--;
                         }
                     }
-                    current = genStateWithoutAlter(s.substring(start, start + len));
-                    i = start + len;
+                    current = genState(s.substring(start, i));
                     break;
                 default:
                     assert Character.isLetterOrDigit(ch) || Character.isSpaceChar(ch);
@@ -229,6 +229,7 @@ class PlusState extends GroupState {
         addBody(state);
         exit.addNext(entrance);
     }
+    
     @Override
     public boolean isEnd() {
         return exit.next.size() == 1 && exit.next.get(0).equals(entrance);
