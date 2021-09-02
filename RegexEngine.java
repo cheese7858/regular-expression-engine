@@ -29,8 +29,8 @@ public class RegexEngine {
         if (args.length == 1 && args[0].equals("-v")) {
             verbose = true;
         }
-        RegexEngine regexEngine = new RegexEngine("ab|c");
-        regexEngine.match("ab");
+        RegexEngine regexEngine = new RegexEngine("c+");
+        regexEngine.match("ccc");
     }
 
     /**
@@ -40,9 +40,7 @@ public class RegexEngine {
      * @retval the tail of this serial
      */
     State genStateWithoutAlter(String s) {
-        GroupState group = new GroupState();
-        EmptyState entrance = new EmptyState();
-        State tail = entrance, current;
+        State tail = null, head = null, current;
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
             switch (ch) {
@@ -80,14 +78,15 @@ public class RegexEngine {
                         break;
                 }
             }
-            tail.addNext(current);
-            tail = current;
+            if (head == null) {
+                head = current;
+                tail = current;
+            } else {
+                tail.addNext(current);
+                tail = current;
+            }
         }
-        EmptyState exit = new EmptyState();
-        tail.addNext(exit);
-        group.entrance = entrance;
-        group.exit = exit;
-        return group;
+        return head;
     }
 
     /**
@@ -118,26 +117,22 @@ public class RegexEngine {
                     break;
             }
         }
-        if (alters.isEmpty()) {
-            return genStateWithoutAlter(s);
-        } else {
-            GroupState group = new GroupState();
-            EmptyState entrance = new EmptyState();
-            List<State> bodys = new ArrayList<>();
-            int pre = 0;
-            for (Integer i : alters) {
-                bodys.add(genStateWithoutAlter(s.substring(pre, i)));
-                pre = i + 1;
-            }
-            bodys.add(genStateWithoutAlter(s.substring(pre)));
-            EmptyState exit = new EmptyState();
-            group.entrance = entrance;
-            group.exit = exit;
-            for (State state : bodys) {
-                group.addBody(state);
-            }
-            return group;
+        GroupState group = new GroupState();
+        EmptyState entrance = new EmptyState();
+        List<State> bodys = new ArrayList<>();
+        int pre = 0;
+        for (Integer i : alters) {
+            bodys.add(genStateWithoutAlter(s.substring(pre, i)));
+            pre = i + 1;
         }
+        bodys.add(genStateWithoutAlter(s.substring(pre)));
+        EmptyState exit = new EmptyState();
+        group.entrance = entrance;
+        group.exit = exit;
+        for (State state : bodys) {
+            group.addBody(state);
+        }
+        return group;
     }
 }
 
@@ -205,7 +200,7 @@ class GroupState extends State {
 
     @Override
     public boolean isEnd() {
-        return false;
+        return exit.isEnd();
     }
 
     @Override
@@ -216,8 +211,8 @@ class GroupState extends State {
     @Override
     public List<State> toTails() {
         List<State> result = new ArrayList<>();
-        if (exit.isEnd()) {
-            result.add(this);
+        if (isEnd()) {
+            result.add(exit);
         } else {
             for (State state : exit.next) {
                 if (state != entrance) {
@@ -233,6 +228,10 @@ class PlusState extends GroupState {
     public PlusState(State state) {
         addBody(state);
         exit.addNext(entrance);
+    }
+    @Override
+    public boolean isEnd() {
+        return exit.next.size() == 1 && exit.next.get(0).equals(entrance);
     }
 }
 
