@@ -97,5 +97,24 @@ public class RegexTest {
         assertFalse(regexEngine.match("c  "));
         assertFalse(regexEngine.match("d    "));
     }
+
+    @Test
+    public void test03() {
+        RegexEngine regexEngine = new RegexEngine("(ab)*|c+");
+        assertTrue(regexEngine.match("ccc"));
+        assertTrue(regexEngine.match(""));
+        assertFalse(regexEngine.match("abc"));
+    }
+
+    @Test
+    public void test04() {
+        RegexEngine regexEngine = new RegexEngine("((ab)*|c+)de+f*");
+        assertTrue(regexEngine.match("def"));
+        assertTrue(regexEngine.match("abde"));
+        assertTrue(regexEngine.match("cccdeeefff"));
+        assertFalse(regexEngine.match("abcdef"));
+        assertFalse(regexEngine.match("df"));
+        assertFalse(regexEngine.match("ccc"));
+    }
 }
 
