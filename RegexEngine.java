@@ -15,22 +15,39 @@ import java.util.Scanner;
  */ 
 public class RegexEngine {
     static boolean verbose = false;
+    List<String> patterns = new ArrayList<>();
     State startState;
 
     public RegexEngine(String string) {
-        this.startState = genState(string);
+        this.patterns.add("");
+        startState = new EmptyState();
+        genState(startState, string);
     }
 
     public boolean match(String string) {
         return startState.match(string);
     }
 
+    public void verbose() {
+        State.verbose(patterns);
+    }
+
     public static void main(String[] args) {
         if (args.length == 1 && args[0].equals("-v")) {
             verbose = true;
         }
-        RegexEngine regexEngine = new RegexEngine("((ab)*|c+)de+f*");
-        regexEngine.match("def");
+        Scanner scanner = new Scanner(System.in);
+        String regex = scanner.nextLine();
+        RegexEngine regexEngine = new RegexEngine(regex);
+        if (verbose) {
+            regexEngine.verbose();
+        }
+        System.out.println("ready");
+        while (scanner.hasNext()) {
+            String string = scanner.nextLine();
+            System.out.println(regexEngine.match(string));
+        }
+        scanner.close();
     }
     
     /**
@@ -39,8 +56,8 @@ public class RegexEngine {
      * @param string
      * @retval the tail of this serial
      */
-    State genStateWithoutAlter(String s) {
-        State tail = null, head = null, current;
+    State genStateWithoutAlter(State head, String s) {
+        State tail = head, current_head, current_tail;
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
             switch (ch) {
@@ -55,46 +72,54 @@ public class RegexEngine {
                             pares--;
                         }
                     }
-                    current = genState(s.substring(start, i));
+                    current_head = new EmptyState();
+                    current_tail = genState(current_head, s.substring(start, i));
                     break;
                 default:
-                    assert Character.isLetterOrDigit(ch) || Character.isSpaceChar(ch);
-                    current = new PatternState(new CharPattern(ch));
+                    assert Character.isLetterOrDigit(ch) || 
+                           Character.isSpaceChar(ch);
+                    current_head = current_tail = 
+                    new PatternState(new CharPattern(ch));
+                    this.patterns.add(String.valueOf(ch));
                     break;
             }
             if (i + 1 < s.length()) {
                 switch (s.charAt(i + 1)) {
                     case '+':
-                        PlusState plusState = new PlusState(current);
-                        current = plusState;
+                        EmptyState plus_head = new EmptyState(), 
+                                   plus_tail = new EmptyState();
+                        plus_head.addNext(current_head);
+                        current_tail.addNext(plus_tail);
+                        plus_tail.addNext(plus_head);
+                        current_head = plus_head;
+                        current_tail = plus_tail;
                         i++;
                         break;
                     case '*':
-                        MultState multState = new MultState(current);
-                        current = multState;
+                        EmptyState mult_head = new EmptyState();
+                        mult_head.addNext(current_head);
+                        current_tail.addNext(mult_head);
+                        current_head = mult_head;
+                        current_tail = mult_head;
                         i++;
                         break;
                     default:
                         break;
                 }
             }
-            if (head == null) {
-                head = current;
-                tail = current;
-            } else {
-                tail.addNext(current);
-                tail = current;
-            }
+            tail.addNext(current_head);
+            tail = current_tail;
         }
-        return head;
+        return tail;
     }
+
     
     /**
      * @brief generate a serial states from the given regex string
      * @param string
      * @retval the tail of this serial
      */
-    State genState(String s) {
+    State genState(State head, String s) {
         List<Integer> alters = new ArrayList<>();
         for (int i = 0; i < s.length(); i++) {
             char ch = s.charAt(i);
@@ -117,27 +142,24 @@ public class RegexEngine {
                     break;
             }
         }
-        GroupState group = new GroupState();
-        EmptyState entrance = new EmptyState();
-        List<State> bodys = new ArrayList<>();
+        List<State> body_tails = new ArrayList<>();
         int pre = 0;
         for (Integer i : alters) {
-            bodys.add(genStateWithoutAlter(s.substring(pre, i)));
+            body_tails.add(genStateWithoutAlter(head, s.substring(pre, i)));
             pre = i + 1;
         }
-        bodys.add(genStateWithoutAlter(s.substring(pre)));
-        EmptyState exit = new EmptyState();
-        group.entrance = entrance;
-        group.exit = exit;
-        for (State state : bodys) {
-            group.addBody(state);
+        body_tails.add(genStateWithoutAlter(head, s.substring(pre)));
+        EmptyState tail = new EmptyState();
+        for (State body_tail : body_tails) {
+            body_tail.addNext(tail);
         }
-        return group;
+        return tail;
     }
 }
 
 class State {
     static int count = 0;
+    static List<State> states = new ArrayList<>();
     int id;
     List<State> next;
 
@@ -145,6 +167,7 @@ class State {
         id = count;
         count++;
         next = new ArrayList<>();
+        states.add(this);
     }
 
     public void addNext(State state) {
@@ -159,89 +182,41 @@ class State {
         return false;
     }
 
-    public List<State> toTails() {
+    public boolean access(String string) {
+        return string.isEmpty();
+    }
+
+    public List<State> toNext(String pattern) {
         List<State> result = new ArrayList<>();
-        if (isEnd()) {
-            result.add(this);
-        } else {
-            for (State state : next) {
-                result.addAll(state.toTails());
+        for (State state : next) {
+            if (state.access(pattern)) {
+                result.add(state);
             }
         }
         return result;
     }
-}
 
-class GroupState extends State {
-    EmptyState entrance, exit;
-
-    public GroupState() {
-        entrance = new EmptyState();
-        exit = new EmptyState();
-    }
-
-    public void addBody(State state) {
-        entrance.addNext(state);
-        List<State> tails = state.toTails();
-        for (State tail : tails) {
-            tail.addNext(exit);
-        }
-    }
-
-    @Override
-    public boolean match(String string) {
-        for (State state : entrance.next) {
-            if (state.match(string)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean isEnd() {
-        return exit.isEnd();
-    }
-
-    @Override
-    public void addNext(State state) {
-        exit.addNext(state);
-    }
-
-    @Override
-    public List<State> toTails() {
-        List<State> result = new ArrayList<>();
+    public void print(List<String> patterns) {
         if (isEnd()) {
-            result.add(exit);
-        } else {
-            for (State state : exit.next) {
-                if (state != entrance) {
-                    result.addAll(state.toTails());
-                }
-            }
+            System.out.print("*");
         }
-        return result;
+        System.out.print("s" + id);
+        for (String pattern : patterns) {
+            List<String> children = new ArrayList<>();
+            for (State state : toNext(pattern)) {
+                children.add("s" + state.id);
+            }
+            System.out.print("\t" + String.join(",", children));
+        }
+        System.out.println();
     }
-}
 
-class PlusState extends GroupState {
-    public PlusState(State state) {
-        addBody(state);
-        exit.addNext(entrance);
-    }
-    
-    @Override
-    public boolean isEnd() {
-        return exit.next.size() == 1 && exit.next.get(0).equals(entrance);
-    }
-}
-
-class MultState extends GroupState {
-    public MultState(State state) {
-        PlusState plusState = new PlusState(state);
-        EmptyState emptyState = new EmptyState();
-        addBody(plusState);
-        addBody(emptyState);
+    public static void verbose(List<String> patterns) {
+        System.out.println("\t" + String.join("\t", patterns));
+        System.out.print(">");
+        for (State state : states) {
+            state.print(patterns);
+        }
     }
 }
 
@@ -256,6 +231,9 @@ class PatternState extends State {
     public boolean match(String string) {
         String trimed = pattern.trimMatch(string);
         if (trimed != null) {
+            if (trimed.isEmpty() && isEnd()) {
+                return true;
+            }
             for (State state : next) {
                 if (state.match(trimed)) {
                     return true;
@@ -264,21 +242,19 @@ class PatternState extends State {
         }
         return false;
     }
+
+    @Override
+    public boolean access(String string) {
+        String reset = pattern.trimMatch(string);
+        return reset != null && reset.isEmpty();
+    }
 }
+
 
 class EmptyState extends PatternState {
     public EmptyState() {
         super(new EmptyPattern());
     }
-
-    @Override
-    public boolean match(String string) {
-        if (isEnd() && string.isEmpty()) {
-            return true;
-        }
-        return super.match(string);
-    }
-
 }
 
 /**
