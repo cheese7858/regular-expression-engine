@@ -41,15 +41,27 @@ public class RegexEngine {
         RegexEngine regexEngine = new RegexEngine(regex);
         if (verbose) {
             regexEngine.verbose();
+            System.out.println();
+            System.out.println("ready");
+            String string = "";
+            while (true) {
+                System.out.println(regexEngine.match(string));
+                String s = scanner.nextLine();
+                if (s.isEmpty()) {
+                    string = "";
+                } else {
+                    string += s;
+                }
+            }
+        } else {
+            System.out.println("ready");
+            while (true) {
+                String s = scanner.nextLine();
+                System.out.println(regexEngine.match(s));
+            }
         }
-        System.out.println("ready");
-        while (scanner.hasNext()) {
-            String string = scanner.nextLine();
-            System.out.println(regexEngine.match(string));
-        }
-        scanner.close();
     }
-    
+
     /**
      * @brief generate a serial of state from the given regex string,
      * which does not have alternation operators in the first layer
@@ -158,10 +170,10 @@ public class RegexEngine {
 }
 
 class State {
-    static int count = 0;
-    static List<State> states = new ArrayList<>();
-    int id;
-    List<State> next;
+    private static int count = 0;
+    private static List<State> states = new ArrayList<>();
+    protected int id;
+    protected List<State> next;
 
     public State() {
         id = count;
@@ -170,32 +182,59 @@ class State {
         states.add(this);
     }
 
+    /**
+     * add next state
+     * @param state
+     */
     public void addNext(State state) {
         next.add(state);
     }
 
+    /**
+     * whether it's the end
+     * @retval
+     */
     public boolean isEnd() {
         return next.isEmpty();
     }
 
+    /**
+     * check this state and its next states is matching a given string
+     * @param string
+     * @retval
+     */
     public boolean match(String string) {
         return false;
     }
 
-    public boolean access(String string) {
+    /**
+     * check if this state accept a given string 
+     * @param string
+     * @retval
+     */
+    public boolean accept(String string) {
         return string.isEmpty();
     }
 
+    /**
+     * next states of a given pattern
+     * @param pattern
+     * @retval states 
+     */
     public List<State> toNext(String pattern) {
         List<State> result = new ArrayList<>();
         for (State state : next) {
-            if (state.access(pattern)) {
+            if (state.accept(pattern)) {
                 result.add(state);
             }
         }
         return result;
     }
 
+    /**
+     * print state's transition table, in verbose mode
+     * @param patterns
+     */
     public void print(List<String> patterns) {
         if (isEnd()) {
             System.out.print("*");
@@ -211,6 +250,10 @@ class State {
         System.out.println();
     }
 
+    /**
+     * verbose mode
+     * @param patterns
+     */
     public static void verbose(List<String> patterns) {
         System.out.println("\t" + String.join("\t", patterns));
         System.out.print(">");
@@ -244,7 +287,7 @@ class PatternState extends State {
     }
 
     @Override
-    public boolean access(String string) {
+    public boolean accept(String string) {
         String reset = pattern.trimMatch(string);
         return reset != null && reset.isEmpty();
     }
